@@ -55,7 +55,7 @@ Issues = "https://github.com/saahiyo/terabox-gateway/issues"
 terabox-gateway = "terabox_gateway.main:cli"
 
 [tool.setuptools]
-package-dir = {"": "src"}
+package-dir = {"" = "src"}
 include-package-data = true
 
 [tool.setuptools.packages.find]
