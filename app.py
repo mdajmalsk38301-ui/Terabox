@@ -33,19 +33,23 @@ def extract_terabox():
         }), 500
 
     try:
-        # 1. Extract surl from the URL
+        # 1. Extract the unique ID (surl) regardless of what domain the user pasted
         surl = share_url.split('/s/')[-1].strip()
         if not surl.startswith('1'):
             surl = '1' + surl
+
+        # FORCE the URL to use the main terabox domain. 
+        # This makes the API work for terasharefile, nephobox, 1024tera, etc.
+        official_share_url = f"https://www.terabox.com/s/{surl}"
 
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Cookie": f"ndus={ndus_cookie};"
         }
 
-        # 2. Fetch the share page to extract hidden security tokens
+        # 2. Fetch the share page from the official domain
         session = requests.Session()
-        page_resp = session.get(share_url, headers=headers, timeout=15)
+        page_resp = session.get(official_share_url, headers=headers, timeout=15)
         
         match = re.search(r'window\.yunData\s*=\s*({.*?});', page_resp.text)
         if not match:
@@ -100,4 +104,4 @@ if __name__ == '__main__':
     # Use PORT provided by the environment (Render/Heroku compatible)
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-      
+    
