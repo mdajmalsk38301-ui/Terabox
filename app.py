@@ -17,14 +17,39 @@ def extract_terabox():
     if not share_url:
         return jsonify({"status": "error", "message": "Missing 'url' parameter"}), 400
 
-    # The library requires both the lang and ndus cookies combined
     ndus_cookie = os.environ.get("NDUS_COOKIE")
-    
     if not ndus_cookie:
         return jsonify({"status": "error", "message": "NDUS_COOKIE is not set in Render."}), 500
 
-    # Format the cookie exactly how the library expects it
     formatted_cookie = f"lang=en; ndus={ndus_cookie};"
+
+    try:
+        # FORCE the URL to use the main terabox domain for the library
+        surl = share_url.split('/s/')[-1].strip()
+        official_share_url = f"https://www.terabox.com/s/{surl}"
+
+        # Initialize the bypasser
+        terabox = TeraboxDL(formatted_cookie)
+        
+        # Pass the OFFICIAL url to the library, not the terasharefile one
+        file_info = terabox.get_file_info(official_share_url)
+
+        if "error" in file_info:
+            return jsonify({"status": "error", "message": file_info["error"]}), 400
+
+        return jsonify({
+            "status": "success",
+            "files": [{
+                "filename": file_info.get("file_name"),
+                "size": file_info.get("file_size"),
+                "download_link": file_info.get("download_link"),
+                "thumbnail": file_info.get("thumbnail")
+            }]
+        })
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Server Error: {str(e)}"}), 500
+        
 
     try:
         # Initialize the bypasser
