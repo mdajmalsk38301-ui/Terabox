@@ -1,14 +1,14 @@
 import os
+import requests
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from TeraboxDL import TeraboxDL
 
 app = Flask(__name__)
 CORS(app) 
 
 @app.route('/')
 def index():
-    return jsonify({"status": "success", "message": "Terabox API is running using TeraboxDL."})
+    return jsonify({"status": "success", "message": "Terabox API is running via Gateway Proxy."})
 
 @app.route('/api/terabox', methods=['GET'])
 def extract_terabox():
@@ -17,67 +17,41 @@ def extract_terabox():
     if not share_url:
         return jsonify({"status": "error", "message": "Missing 'url' parameter"}), 400
 
-    ndus_cookie = os.environ.get("NDUS_COOKIE")
-    if not ndus_cookie:
-        return jsonify({"status": "error", "message": "NDUS_COOKIE is not set in Render."}), 500
-
-    formatted_cookie = f"lang=en; ndus={ndus_cookie};"
-
     try:
-        # FORCE the URL to use the main terabox domain for the library
-        surl = share_url.split('/s/')[-1].strip()
-        official_share_url = f"https://www.terabox.com/s/{surl}"
-
-        # Initialize the bypasser
-        terabox = TeraboxDL(formatted_cookie)
+        # We proxy the request to an actively maintained open-source extraction gateway
+        # This prevents your API from breaking when Terabox updates their security
+        gateway_api = "https://tera-core.vercel.app/api2"
         
-        # Pass the OFFICIAL url to the library, not the terasharefile one
-        file_info = terabox.get_file_info(official_share_url)
+        # Pass the user's URL to the gateway
+        resp = requests.get(gateway_api, params={"url": share_url}, timeout=20)
+        data = resp.json()
 
-        if "error" in file_info:
-            return jsonify({"status": "error", "message": file_info["error"]}), 400
+        # Handle the gateway's response
+        raw_files = data.get("files") or ([data] if data.get("direct_link") else [])
 
-        return jsonify({
-            "status": "success",
-            "files": [{
-                "filename": file_info.get("file_name"),
-                "size": file_info.get("file_size"),
-                "download_link": file_info.get("download_link"),
-                "thumbnail": file_info.get("thumbnail")
-            }]
-        })
+        files = []
+        for f in raw_files:
+            files.append({
+                "filename": f.get("filename") or f.get("file_name"),
+                "size": f.get("size"),
+                "thumbnail": f.get("thumbnail") or f.get("thumb"),
+                "download_link": f.get("direct_link") or f.get("download_link"),
+                "stream_link": f.get("stream_link"),
+            })
 
-    except Exception as e:
-        return jsonify({"status": "error", "message": f"Server Error: {str(e)}"}), 500
-        
-
-    try:
-        # Initialize the bypasser
-        terabox = TeraboxDL(formatted_cookie)
-        
-        # Fetch the file info automatically
-        file_info = terabox.get_file_info(share_url)
-
-        # The library returns an "error" key if the link is dead or cookie is invalid
-        if "error" in file_info:
+        if not files or not files[0].get("download_link"):
             return jsonify({
-                "status": "error", 
-                "message": file_info["error"]
-            }), 400
+                "status": "error",
+                "message": data.get("message") or "No playable files found. The link might be dead."
+            }), 404
 
-        # Success! Return the data formatted for your frontend player
-        return jsonify({
-            "status": "success",
-            "files": [{
-                "filename": file_info.get("file_name"),
-                "size": file_info.get("file_size"),
-                "download_link": file_info.get("download_link"),
-                "thumbnail": file_info.get("thumbnail")
-            }]
-        })
+        return jsonify({"status": "success", "files": files})
 
     except Exception as e:
-        return jsonify({"status": "error", "message": f"Server Error: {str(e)}"}), 500
+        return jsonify({
+            "status": "error", 
+            "message": f"Gateway Extraction failed: {str(e)}"
+        }), 502
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
